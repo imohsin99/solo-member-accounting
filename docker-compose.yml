@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  db: # postgresql
+    image: postgres:15.3-alpine
+    container_name: solodb
+    networks:
+      - solonetwork
+    ports: # <Port exposed> : <MySQL Port running inside container>
+      - "5431:5432"
+    environment:
+      POSTGRES_USER: solofunds
+      POSTGRES_PASSWORD: Solofunds123
+      POSTGRES_DB: solofunds
+    volumes:
+      # NOTE: db init scripts are run only with a data directory that is empty;
+      # any pre-existing database will be left untouched on container startup.
+      - ./db/initdb.d:/docker-entrypoint-initdb.d
+      - ./db/pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  activemq: # activemq
+    image: symptoma/activemq:5.18.0
+    container_name: soloactivemq
+    networks:
+      - solonetwork
+    ports: # We want to use ports that are not already used by other SoLo containers
+      - "8160:8161"
+      - "61612:61616" #tcp
+      - "5671:5672" #amqp
+    volumes:
+      - ./docker-config/activemq.xml:/opt/activemq/conf/activemq.xml
+      - ./docker-config/jetty-realm.properties:/opt/activemq/conf/jetty-realm.properties
+      - ./docker-config/login.config:/opt/activemq/conf/login.config
+      - ./docker-config/users.properties:/opt/activemq/conf/users.properties
+      - ./docker-config/groups.properties:/opt/activemq/conf/groups.properties
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+networks:
+  solonetwork:
+    name: solonetwork
+    driver: bridge

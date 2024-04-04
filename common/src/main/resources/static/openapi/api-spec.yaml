@@ -1,0 +1,1872 @@
+openapi: 3.0.3
+
+info:
+  title: Solo Member Accounting API
+  description: |-
+    This API allows for interaction with the SoLo Member Accounting applications. This will include access to transactions, account statements, the double entry accounting ledger, loan request and fulfillment, and the history of token use for checking balances and accessing accounts through Plaid.
+  version: 1.0.00
+servers:
+  - url: 'https://member-accounting-staging.solofunds.io/'
+paths:
+  /solobank/v1/healthcheck:
+    get:
+      operationId: healthCheck
+      summary: Perform a health check
+      responses:
+        '200':
+          description: Healthcheck response
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/HealthCheck'
+              example: 'Healthcheck response: test response'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: 'The JMS connection has failed: Transport connection remotely closed.'
+      tags:
+        - Healthcheck
+  /balance/{walletAccountId}:
+    get:
+      operationId: getBalance
+      summary: Retrieve the available, pending, and solo credit balance for a given walletAccountId
+      parameters:
+        - in: path
+          name: walletAccountId
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: walletAccountId we want to wallet balance of
+      responses:
+        '200':
+          description: Wallet Balance
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/BalanceDto'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: 'The get balance request has failed: Transport connection remotely closed.'
+      tags:
+        - Balance
+
+  /loan_request:
+    post:
+      operationId: createLoanRequest
+      summary: Create a Loan Request
+      requestBody:
+        description: The Loan Request
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLoanRequestDto'
+      responses:
+        '201':
+          description: Loan Request successfully created.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/LoanRequestDto'
+    get:
+      operationId: getFilteredAndSortedLoanRequests
+      summary: Filter and Sort Loan Requests
+      parameters:
+        - name: status
+          in: query
+          description: Loan Status
+          required: true
+          schema:
+            type: string
+            $ref: '#/components/schemas/LoanRequestStatus'
+        - name: sort
+          in: query
+          description: Sort direction (asc or desc)
+          required: false
+          schema:
+            type: string
+            $ref: '#/components/schemas/SortDirection'
+        - name: sortBy
+          in: query
+          description: Field to sort by (SOLO_SCORE, CREATED_AT, AMOUNT, TIP_AMOUNT)
+          required: false
+          schema:
+            type: string
+            $ref: '#/components/schemas/SortBy'
+        - name: slpEligible
+          in: query
+          description: Filter by SLP eligibility (true or false)
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: The requested Loan Requests By Status
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoanRequestDto'
+  /loan_request/{id}:
+    get:
+      operationId: getLoanRequest
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the Loan Request to get
+      responses:
+        '200':
+          description: The requested Loan Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/LoanRequestDto'
+    delete:
+      operationId: deleteLoanRequest
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the Loan Request to delete
+      responses:
+        '200':
+          description: Loan Request Deleted
+
+  /account_statements/{id}:
+    get:
+      operationId: getAccountStatementById
+      requestBody:
+        description: Member Data
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberDataDto'
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the account statement to get
+        - in: query
+          name: format
+          description: Query param to download account statement in pdf or csv format
+          required: false
+          schema:
+            $ref: '#/components/schemas/Format'
+      responses:
+        '200':
+          description: The requested account statement
+          content:
+            'application/json':
+              schema:
+                type: object
+            'application/pdf':
+              schema:
+                type: object
+            'application/csv':
+              schema:
+                type: object
+
+    delete:
+      operationId: deleteAccountStatementById
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the account statement to delete
+      responses:
+        '200':
+          description: The requested account statement to be deleted
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/AccountStatementDto'
+
+  /account_statements:
+    get:
+      operationId: getAllAccountStatements
+      responses:
+        '200':
+          description: requested account statements
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountStatementDto'
+
+  /account_statements/wallet/{id}:
+    get:
+      operationId: getAllAccountStatementsByWalletAccountId
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of wallet account to get all account statements
+      responses:
+        '200':
+          description: The requested account statements
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountStatementDto'
+
+  /account_statements/{walletAccountId}:
+    post:
+      operationId: createAccountStatement
+      summary: Create a new account statement for last one month
+      parameters:
+        - in: path
+          name: walletAccountId
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the wallet account to created account statement
+      requestBody:
+        description: The start_time and end_time to be used create account statement
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountStatementDto'
+      responses:
+        '201':
+          description: created account statement
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/AccountStatementDto'
+
+  /member_transaction/{id}:
+    get:
+      operationId: getTransactionByTransactionId
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the Member Transaction to get
+      responses:
+        '200':
+          description: The requested Member Transaction request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/MemberTransactionDto'
+  /member_transaction:
+    post:
+      operationId: createMemberTransaction
+      summary: Create a Member Transaction
+      requestBody:
+        description: The Request of Member Transaction Creation
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMemberTransactionDto'
+      responses:
+        '201':
+          description: Member Transaction successfully created.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/MemberTransactionDto'
+
+  /ledger_entries/{loan-id}:
+    get:
+      operationId: getLedgerEntriesOfLoan
+      parameters:
+        - in: path
+          name: loan-id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the Loan for which to get ledger entries
+      responses:
+        '200':
+          description: ledger entries of given loan
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LedgerEntryDto'
+
+    post:
+      operationId: createLedgerEntryOfLoan
+      summary: Create a new ledger entry of given loan
+      parameters:
+        - in: path
+          name: loan-id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the Loan for which to create ledger entry
+      requestBody:
+        description: The Ledger Entry to create
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LedgerEntryDto'
+      responses:
+        '201':
+          description: created ledger entry
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/LedgerEntryDto'
+
+  /ledger_entries:
+    get:
+      operationId: getLedgerEntriesOfMember
+      parameters:
+        - in: query
+          name: member-guid
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the Member for which to get ledger entries
+      responses:
+        '200':
+          description: ledger entries of given member
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LedgerEntryDto'
+
+  /funding_proposal:
+    post:
+      operationId: createFundingProposal
+      summary: Create a Funding Proposal
+      requestBody:
+        description: The Funding Proposal
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFundingProposalDto'
+      responses:
+        '201':
+          description: Funding Proposal successfully created.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/FundingProposalDto'
+  /funding_proposal/{id}:
+    get:
+      operationId: getFundingProposal
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the Funding Proposal to get
+      responses:
+        '200':
+          description: The requested Funding Proposal
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/FundingProposalDto'
+    delete:
+      operationId: deleteFundingProposal
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the Funding Proposal to delete
+      responses:
+        '200':
+          description: Funding Proposal Deleted
+    patch:
+      operationId: updateFundingProposal
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the Funding Proposal to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFundingProposalDto'
+      responses:
+        '200':
+          description: The updated Funding Proposal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundingProposalDto'
+
+  /call_calculate_starting_balance:
+    post:
+      operationId: callCalculateStartingBalanceFunction
+      summary: Call the calculate_starting_balance function to populate the starting_balance table
+      requestBody:
+        description: The start_time and end_time to be used in the calculate_starting_balance postgres function
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalculateStartingBalanceDto'
+      responses:
+        '201':
+          description: calculate_starting_balance function has been triggered successfully.
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: 'The calculate_starting_balance function has been triggered successfully.'
+
+  /payment_order:
+    post:
+      operationId: createPaymentOrder
+      summary: Create a Payment Order (Payout)
+      requestBody:
+        description: The Payment Order
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentOrderDto'
+      responses:
+        '201':
+          description: Payment Order successfully created.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/PaymentOrderDto'
+  /payment_order/{walletAccountId}:
+    get:
+      operationId: getPaymentOrdersByWalletAccountId
+      parameters:
+        - in: path
+          name: walletAccountId
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: WalletAccountId used to return all PaymentOrder results where OriginatingWalletId or ReceivingWalletId are equal to WalletAccountId
+      responses:
+        '200':
+          description: All PaymentOrder records for the given WalletAccountId
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentOrderDto'
+
+  /fees/loan/{id}:
+    get:
+      operationId: getFeeByLoanId
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of Loan to get all Fees
+      responses:
+        '200':
+          description: The Requested Fees for Loan request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeeDto'
+
+    post:
+      operationId: createFeeForLoan
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of Loan to add Fee
+      requestBody:
+        description: Create Fee for Loan Request
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFeeDto'
+      responses:
+        '201':
+          description: Fee for Loan successfully added
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/FeeDto'
+
+  /fees/collections/{id}:
+    get:
+      operationId: getFeeByCollectionsId
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of Collections to get all Fees
+      responses:
+        '200':
+          description: The Requested Fees for Collections request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeeDto'
+
+    post:
+      operationId: createFeeForCollections
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of Collections to add Fee
+      requestBody:
+        required: true
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/CreateFeeDto'
+      responses:
+        '201':
+          description: Fee for Collections successfully added
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/FeeDto'
+  /loan_request/{id}/funding_proposal:
+    get:
+      operationId: getAllFundingProposalByLoanRequestId
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      description: GUID of the Loan Request to get all Funding Proposals
+      responses:
+        '200':
+          description: The requested Funding Proposals against given Loan Request Id
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FundingProposalDto'
+
+  /loan/{id}:
+    get:
+      operationId: getLoanById
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of Loan to get Loan
+      responses:
+        '200':
+          description: The Requested Loan for Loan request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/LoanDto'
+
+    patch:
+      operationId: updateLoan
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of Loan to update
+      requestBody:
+        description: Loan fields to be updated
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLoanDto'
+      responses:
+        '201':
+          description: Updated Loan DTO
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/LoanDto'
+  /loan:
+    post:
+      operationId: createLoan
+      summary: Create a new loan
+      requestBody:
+        description: The new Loan created request
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLoanDto'
+      responses:
+        '201':
+          description: Loan successfully created.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/LoanDto'
+
+  /member/{id}/loan:
+    get:
+      operationId: getAllLoansByMemberId
+      summary: Get all loans by lender or borrower member id.Based on optional query param get all loans by status
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of member to get Loans
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/LoanStatus'
+          required: false
+          description: Get all loans by Loan Status like COLLECTIONS, OPEN ,FUNDED etc
+      responses:
+        '200':
+          description: The requested loans of member
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoanDto'
+
+  /collections/{id}:
+    get:
+      operationId: getCollectionsById
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of Collections to get Collections
+      responses:
+        '200':
+          description: The requested Collections
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/CollectionsDto'
+
+  /collections:
+    post:
+      operationId: createCollections
+      summary: Create a new collections
+      requestBody:
+        description: The new Collections created request
+        required: true
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/CreateCollectionsDto'
+      responses:
+        '201':
+          description: Collections successfully created.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/CollectionsDto'
+
+  /wallet_account:
+    post:
+      operationId: createWalletAccount
+      summary: Create a Wallet Account
+      requestBody:
+        description: The Wallet Account Request
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWalletAccountDto'
+      responses:
+        '201':
+          description: Wallet Account successfully created.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WalletAccountDto'
+  /wallet_account/{id}:
+    get:
+      operationId: getWalletAccount
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the Wallet Account to get
+      responses:
+        '200':
+          description: The requested Wallet Account
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WalletAccountDto'
+  /member/{id}/wallet-account:
+    get:
+      operationId: getAllWalletAccountsByMemberId
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of member to get Wallet Accounts
+      responses:
+        '200':
+          description: The requested Wallet Accounts of member
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WalletAccountDto'
+
+  /transaction_errors:
+    post:
+      operationId: addTransactionError
+      requestBody:
+        description: Add Transaction Error
+        required: true
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/TransactionErrorCodeDTO'
+      responses:
+        '200':
+          description: Created Transaction Error
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/TransactionErrorCodeDTO'
+
+  /transaction_errors/{walletId}:
+    get:
+      operationId: getTransactionErrorsByWalletAccount
+      parameters:
+        - in: path
+          name: walletId
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of wallet account to get transaction errors
+      responses:
+        '200':
+          description: Fetched Truncation Errors
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionErrorCodeDTO'
+
+  /bank_card:
+    post:
+      operationId: createBankCard
+      summary: Create a Bank Card
+      requestBody:
+        description: The Bank Card
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBankCardDto'
+      responses:
+        '201':
+          description: Bank Card successfully created
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/BankCardDto'
+  /bank_card/{id}:
+    get:
+      operationId: getBankCard
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the Bank Card to get
+      responses:
+        '200':
+          description: The requested Bank Card
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/BankCardDto'
+
+  /interchange_node:
+    post:
+      operationId: createInterchangeNode
+      summary: Create an Interchange Node record
+      requestBody:
+        description: The Interchange Node
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInterchangeNodeDto'
+      responses:
+        '201':
+          description: Interchange Node successfully created
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/InterchangeNodeDto'
+  /interchange_node/{id}:
+    get:
+      operationId: getInterchangeNode
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: GUID of the Interchange Node to get
+      responses:
+        '200':
+          description: The requested Interchange Node
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/InterchangeNodeDto'
+
+components:
+  schemas:
+    HealthCheck:
+      type: object
+      properties:
+        healthCheckValue:
+          type: string
+          description: message describing health status
+          example: I am fine, thank you!
+    BalanceDto:
+      type: object
+      properties:
+        currencyCode:
+          type: string
+          description: Currency Code
+          example: USD
+        availableBalance:
+          type: number
+          multipleOf: 0.01
+          description: Available Balance
+          example: 100.00
+        pendingBalance:
+          type: number
+          multipleOf: 0.01
+          description: Pending Balance
+          example: 10.00
+        soloCreditBalance:
+          type: number
+          multipleOf: 0.01
+          description: Solo Credit Balance
+          example: 2.00
+    CreateLoanRequestDto:
+      type: object
+      properties:
+        borrowerWalletAccountId:
+          type: string
+          format: uuid
+        borrowerSoloMemberId:
+          type: string
+          format: uuid
+        soloScore:
+          type: number
+        total:
+          type: number
+        principal:
+          type: number
+          minimum: 1
+        status:
+          type: string
+          $ref: '#/components/schemas/LoanRequestStatus'
+        currencyCode:
+          type: string
+        currencyExponent:
+          type: integer
+          format: int64
+        tipAmount:
+          type: number
+          minimum: 0
+        donationAmount:
+          type: number
+          minimum: 1
+        description:
+          type: string
+          maxLength: 1000
+          minLength: 10
+        duration:
+          type: integer
+          format: int64
+          minimum: 0
+        guaranteeable:
+          type: boolean
+        dueDate:
+          type: string
+          format: date-time
+      required:
+        - borrowerWalletAccountId
+        - principal
+        - currencyCode
+        - currencyExponent
+        - tipAmount
+        - donationAmount
+        - description
+        - duration
+    LoanRequestDto:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/CreateLoanRequestDto'
+      properties:
+        loanRequestId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateFundingProposalDto:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/UpdateFundingProposalDto'
+      properties:
+        loanRequestId:
+          type: string
+          format: uuid
+        lenderWalletAccountId:
+          type: string
+          format: uuid
+        lenderSoloMemberId:
+          type: string
+          format: uuid
+      required:
+        - lenderWalletAccountId
+        - proposedTipAmount
+        - amount
+        - currencyCode
+        - currencyExponent
+    UpdateFundingProposalDto:
+      type: object
+      properties:
+        status:
+          type: string
+          $ref: '#/components/schemas/FundingStatus'
+        proposedTipAmount:
+          type: number
+          minimum: 1
+        slp:
+          type: boolean
+        amount:
+          type: number
+          minimum: 1
+        soloCreditsAmount:
+          type: number
+          minimum: 1
+        currencyCode:
+          type: string
+        currencyExponent:
+          type: integer
+          format: int64
+      required:
+        - proposedTipAmount
+        - amount
+        - currencyCode
+        - currencyExponent
+    FundingProposalDto:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/UpdateFundingProposalDto'
+      properties:
+        fundingProposalId:
+          type: string
+          format: uuid
+        loanRequestId:
+          type: string
+          format: uuid
+        lenderWalletAccountId:
+          type: string
+          format: uuid
+        lenderSoloMemberId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreatePaymentOrderDto:
+      type: object
+      properties:
+        memberTransactionId:
+          type: string
+          format: uuid
+        originatingWalletId:
+          type: string
+          format: uuid
+        originatingAccountType:
+          $ref: '#/components/schemas/AccountType'
+        receivingWalletId:
+          type: string
+          format: uuid
+        receivingAccountType:
+          $ref: '#/components/schemas/AccountType'
+        ledgerTransactionId:
+          type: string
+          format: uuid
+        currencyCode:
+          type: string
+        currencyExponent:
+          type: integer
+          format: int64
+        amount:
+          type: number
+          minimum: 0
+        direction:
+          $ref: '#/components/schemas/Direction'
+        priority:
+          allOf:
+            - $ref: '#/components/schemas/PaymentOrderPriority'
+          default: 'LOW'
+        status:
+          $ref: '#/components/schemas/PaymentOrderStatus'
+        statementDescriptor:
+          type: string
+        purpose:
+          type: string
+        description:
+          type: string
+      required:
+        - memberTransactionId
+        - originatingWalletId
+        - originatingAccountType
+        - receivingWalletId
+        - receivingAccountType
+    PaymentOrderDto:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/CreatePaymentOrderDto'
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AccountStatementDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        walletAccountId:
+          type: string
+          format: uuid
+        soloMemberGUID:
+          type: string
+          format: uuid
+        url:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+        postingDate:
+          type: string
+          format: date-time
+        memberTransactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberTransactionDto'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        document:
+          type: string
+          format: byte
+
+    CreateMemberTransactionDto:
+      type: object
+      properties:
+        soloMemberGUID:
+          type: string
+          format: uuid
+        walletAccountId:
+          type: string
+          format: uuid
+        loanId:
+          type: string
+          format: uuid
+        ledgerTransactionId:
+          type: string
+          format: uuid
+        paymentOrderId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        currencyCode:
+          type: string
+        currencyExponent:
+          type: string
+        type:
+          $ref: '#/components/schemas/Type'
+        category:
+          $ref: '#/components/schemas/Category'
+        direction:
+          $ref: '#/components/schemas/Direction'
+        detailText:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/Status'
+      required:
+        - walletAccountId
+        - amount
+        - currencyCode
+        - currencyExponent
+        - type
+        - category
+        - direction
+        - status
+    MemberTransactionDto:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/CreateMemberTransactionDto'
+      properties:
+        id:
+          type: string
+          format: uuid
+        transactionDate:
+          type: string
+          format: date-time
+        postingDate:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CalculateStartingBalanceDto:
+      type: object
+      properties:
+        startTime:
+          type: string
+          format: date-time
+          description: Start time to be used in the calculate_starting_balance function
+          example: 2023-01-01T00:00:00Z
+        endTime:
+          type: string
+          format: date-time
+          description: End time to be used in the calculate_starting_balance function
+          example: 2023-02-01T00:00:00Z
+      required:
+        - startTime
+        - endTime
+
+    CreateAccountStatementDto:
+      type: object
+      properties:
+        startTime:
+          type: string
+          format: date
+          description: Start date to be used in the account statement creation
+          example: 2023-06-01
+        endTime:
+          type: string
+          format: date
+          description: End date to be used in the account statement creation
+          example: 2023-06-30
+      required:
+        - startTime
+        - endTime
+
+    CreateFeeDto:
+      type: object
+      properties:
+        currencyCode:
+          type: string
+        currencyExponent:
+          type: string
+        amount:
+          type: number
+        type:
+          $ref: '#/components/schemas/FeeType'
+        postedAt:
+          type: string
+          format: date-time
+      required:
+        - currencyCode
+        - currencyExponent
+        - amount
+        - type
+    FeeDto:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/CreateFeeDto'
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateCollectionsDto:
+      type: object
+      properties:
+        loanId:
+          type: string
+          format: uuid
+        status:
+          allOf:
+            - $ref: '#/components/schemas/CollectionStatus'
+          default: IN_PROGRESS
+        paidStatus:
+          allOf:
+            - $ref: '#/components/schemas/RepaymentStatus'
+          default: UNPAID
+        originalTotalDueFromBorrower:
+          type: number
+        totalPaidBackAmount:
+          type: number
+          default: 0
+        borrowersTotalDue:
+          type: number
+        totalGoingToSolo:
+          type: number
+        totalGoingToLender:
+          type: number
+        partialPaymentAgreement:
+          type: boolean
+          default: false
+        partialPaymentFrequency:
+          $ref: '#/components/schemas/PartialPaymentType'
+        partialPaymentAmount:
+          type: number
+        additionalData:
+          type: string
+          format: byte
+      required:
+        - loanId
+    CollectionsDto:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/CreateCollectionsDto'
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    MemberDataDto:
+      type: object
+      properties:
+        solo_member_name:
+          type: string
+        solo_member_address_1:
+          type: string
+        solo_member_address_2:
+          type: string
+
+    UpdateLoanDto:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/LoanStatus'
+        repaymentStatus:
+          $ref: '#/components/schemas/RepaymentStatus'
+        gracePeriodDate:
+          type: string
+          format: date-time
+        datePaid:
+          type: string
+          format: date-time
+        currencyCode:
+          type: string
+        currencyExponent:
+          type: number
+        slp:
+          type: boolean
+        guaranteeable:
+          type: boolean
+        soloCreditAmount:
+          type: number
+        principal:
+          type: number
+        tipAmount:
+          type: number
+        donationAmount:
+          type: number
+        slpFee:
+          type: number
+        lenderAmountAtFunding:
+          type: number
+    CreateLoanDto:
+      type: object
+      properties:
+        loanRequestId:
+          type: string
+          format: uuid
+        acceptedLoanProposalId:
+          type: string
+          format: uuid
+        borrowerWalletAccountId:
+          type: string
+          format: uuid
+        lenderWalletAccountId:
+          type: string
+          format: uuid
+        borrowerSoloMemberId:
+          type: string
+          format: uuid
+        lenderSoloMemberId:
+          type: string
+          format: uuid
+        lenderAmountAtFunding:
+          type: number
+      required:
+        - loanRequestId
+        - acceptedLoanProposalId
+        - borrowerWalletAccountId
+        - lenderWalletAccountId
+    LoanDto:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/CreateLoanDto'
+        - $ref: '#/components/schemas/UpdateLoanDto'
+      properties:
+        id:
+          type: string
+          format: uuid
+        dateIssued:
+          type: string
+          format: date-time
+        dateDue:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateWalletAccountDto:
+      type: object
+      properties:
+        soloMemberGUID:
+          type: string
+          format: uuid
+        bankId:
+          type: string
+          format: uuid
+      required:
+        - soloMemberGUID
+        - bankId
+    WalletAccountDto:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/CreateWalletAccountDto'
+      properties:
+        walletAccountId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateBankCardDto:
+      type: object
+      properties:
+        walletAccountId:
+          type: string
+          format: uuid
+        interchangeNodeId:
+          type: string
+          format: uuid
+        achNodeId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/CardType'
+        isDefault:
+          type: boolean
+        bankInstitutionName:
+          type: string
+      required:
+        - walletAccountId
+        - type
+        - isDefault
+        - bankInstitutionName
+    BankCardDto:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/CreateBankCardDto'
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateInterchangeNodeDto:
+      type: object
+      properties:
+        bankCardId:
+          type: string
+          format: uuid
+        externalBankAccountId:
+          type: string
+          format: uuid
+        walletAccountId:
+          type: string
+          format: uuid
+        cardHash:
+          type: string
+        nodeType:
+          $ref: '#/components/schemas/BankNodeType'
+        cardType:
+          $ref: '#/components/schemas/CardType'
+        network:
+          $ref: '#/components/schemas/Network'
+      required:
+        - bankCardId
+        - externalBankAccountId
+        - walletAccountId
+        - cardHash
+        - nodeType
+        - cardType
+        - network
+    InterchangeNodeDto:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/CreateInterchangeNodeDto'
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    LoanRequestStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - CANCELLED
+
+    FundingStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - ACCEPTED
+        - CANCELLED
+        - DENIED
+
+    LedgerEntryDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        loanLedgerId:
+          type: string
+          format: uuid
+
+        soloMemberGuid:
+            type: string
+            format: uuid
+        memberTransactionIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+        ledgerTransactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/LedgerTransactionDto'
+
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/Status'
+        externalId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - loanLedgerId
+        - soloMemberGuids
+        - status
+
+    LedgerTransactionDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ledgerEntryId:
+          type: string
+          format: uuid
+
+        memberTransactionId:
+          type: string
+          format: uuid
+
+        amount:
+          type: number
+        currencyCode:
+          type: string
+        currencyExponent:
+          type: number
+        category:
+          $ref: '#/components/schemas/Category'
+        direction:
+          $ref: '#/components/schemas/Direction'
+        status:
+          $ref: '#/components/schemas/Status'
+        description:
+          type: string
+        externalId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - ledgerEntryId
+        - memberTransactionId
+        - amount
+        - category
+        - direction
+        - status
+        - currencyCode
+        - currencyExponent
+
+    TransactionErrorCodeDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        bankPartnerId:
+          type: string
+          format: uuid
+          description: The ID of the bank partner.
+        soloMemberGuid:
+          type: string
+          format: uuid
+          description: The GUID of the solo member.
+        walletAccountId:
+          type: string
+          format: uuid
+          description: The ID of the wallet account.
+        transactionId:
+          type: string
+          format: uuid
+          description: The ID of the transaction.
+        bankInstitutionName:
+          type: string
+          description: The name of the bank institution.
+        errorCode:
+          type: string
+          description: The error code.
+        errorMessage:
+          type: string
+          description: The error message.
+        errorClassification:
+          $ref: '#/components/schemas/ErrorClassification'
+        raw:
+          type: string
+          format: byte
+          description: Raw data associated with the error capture.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - bankPartnerId
+        - soloMemberGuid
+        - walletAccountId
+        - transactionId
+        - bankInstitutionName
+        - errorCode
+        - errorMessage
+        - errorClassification
+        - raw
+
+    LoanStatus:
+      type: string
+      enum:
+        - OPEN
+        - FUNDED
+        - CLOSED
+        - CANCELLED
+        - RETURNED
+        - COLLECTIONS
+
+    SortDirection:
+      type: string
+      enum:
+        - ASC
+        - DESC
+
+    SortBy:
+      type: string
+      enum:
+        - SOLO_SCORE
+        - CREATED_AT
+        - AMOUNT
+        - TIP_AMOUNT
+
+    CollectionStatus:
+      type: string
+      enum:
+        - COMPLETED
+        - IN_PROGRESS
+
+    PartialPaymentType:
+      type: string
+      enum:
+        - DAILY
+        - WEEKLY
+        - MONTHLY
+
+    RepaymentStatus:
+      type: string
+      enum:
+        - PAID
+        - PARTIALLY_PAID
+        - UNPAID
+
+    FeeType:
+      type: string
+      enum:
+        - SLP_FEE
+        - ADMIN_FEE
+        - RECOVERY_FEE
+        - SOLO_LATE_FEE
+        - LENDER_LATE_FEE
+        - SYNAPSE_TRANSACTION_FEE
+        - COLLECTIONS_ASSESSMENT_FEE
+
+    Status:
+      type: string
+      enum:
+        - PENDING
+        - POSTED
+        - RETURNED
+        - DENIED
+        - FAILED
+        - CANCELLED
+
+    Direction:
+      type: string
+      enum:
+        - CREDIT
+        - DEBIT
+
+    Category:
+      type: string
+      enum:
+        - FEE
+        - SOLO_CREDIT
+        - RECONCILIATION
+        - DEBIT
+        - CREDIT
+
+    Type:
+      type: string
+      enum:
+        - CREDIT
+        - DEBIT
+        - SOLO_CREDIT
+
+    AccountType:
+      type: string
+      enum:
+        - INTERNAL
+        - EXTERNAL
+
+    PaymentOrderPriority:
+      type: string
+      enum:
+        - LOW
+        - NORMAL
+        - HIGH
+
+    PaymentOrderStatus:
+      type: string
+      enum:
+        - APPROVED
+        - DENIED
+        - CANCELLED
+        - BEGIN_PROCESSING
+        - FINISH_PROCESSING
+        - COMPLETED
+        - RETURNED
+        - FAILED
+        - REVERSED
+
+    Format:
+      type: string
+      enum:
+        - CSV
+        - PDF
+
+    ErrorClassification:
+      type: string
+      enum:
+        - FRAUD
+        - NSF
+        - ACCOUNT_CLOSED
+        - OTHER
+
+    BankNodeType:
+      type: string
+      enum:
+        - ACH
+        - INTERCHANGE
+        - DEPOSIT
+
+    CardType:
+      type: string
+      enum:
+        - DEBIT
+        - CREDIT
+        - PREPAID
+
+    Network:
+      type: string
+      enum:
+        - AMEX
+        - CCPay
+        - Discover
+        - IntlMasterCard
+        - IntlVisa
+        - MasterCard
+        - MasterCardSend
+        - MoneySend
+        - Visa
+        - VisaFF
